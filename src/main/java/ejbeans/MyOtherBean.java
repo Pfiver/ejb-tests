@@ -7,19 +7,17 @@ import javax.ejb.EJB;
 import javax.ejb.EJBContext;
 import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
+import javax.inject.Inject;
+import javax.transaction.Status;
 import javax.transaction.Synchronization;
 import javax.transaction.TransactionSynchronizationRegistry;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 import static java.lang.Integer.toHexString;
 import static javax.ejb.TransactionAttributeType.REQUIRES_NEW;
 
 @Stateless
 @TransactionAttribute(REQUIRES_NEW)
-public class MyBean {
-
-    public static final Map<String, Boolean> rollbackStates = new LinkedHashMap<>();
+public class MyOtherBean {
 
     @Resource
     private EJBContext ejbContext;
@@ -27,17 +25,20 @@ public class MyBean {
     @Resource
     private TransactionSynchronizationRegistry tsr;
 
-    @EJB
-    private MyOtherBean myOtherBean;
+    @Inject
+    private MyCdiBean myCdiBean;
 
-    public void method1() {
+    @EJB
+    private MyThirdBean myThirdBean;
+
+    public void fail() {
 
         tsr.registerInterposedSynchronization(new Synchronization() {
             public void beforeCompletion() {
-                System.out.println("1 before completion");
+                System.out.println("2 before completion");
             }
             public void afterCompletion(int status) {
-                System.out.println("1 after completion: " + TransactionStatus.valueOf(status));
+                System.out.println("2 after completion: " + TransactionStatus.valueOf(status));
             }
         });
 
@@ -45,7 +46,7 @@ public class MyBean {
         System.out.println("TX state: " + TransactionStatus.valueOf(tsr.getTransactionStatus()));
 
         try {
-            myOtherBean.fail();
+            myCdiBean.fail();
         }
         catch (Exception e) {
             System.out.println("exception: " + e.getClass());
@@ -54,6 +55,18 @@ public class MyBean {
         System.out.println("TX: " + toHexString(tsr.getTransactionKey().hashCode()));
         System.out.println("TX state: " + TransactionStatus.valueOf(tsr.getTransactionStatus()));
 
-        rollbackStates.put("MyBean#method1", ejbContext.getRollbackOnly());
+        try {
+            myThirdBean.fail();
+        }
+        catch (Exception e) {
+            System.out.println("exception: " + e.getClass());
+        }
+
+        System.out.println("TX: " + toHexString(tsr.getTransactionKey().hashCode()));
+        System.out.println("TX state: " + TransactionStatus.valueOf(tsr.getTransactionStatus()));
+
+        MyBean.rollbackStates.put("MyOtherBean#method1", ejbContext.getRollbackOnly());
+
+        throw new CustomSystemException();
     }
 }
